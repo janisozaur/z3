@@ -3,4 +3,4 @@ build_script:
   - mkdir build
   - cd build
   - cmake .. -A Arm64
-  - cmake --build .  --configuration Release
+  - cmake --build .  --config Release -j 2
