@@ -88,6 +88,7 @@ extern "C" {
     MK_ARITH_PRED(Z3_mk_gt,  OP_GT);
     MK_ARITH_PRED(Z3_mk_le,  OP_LE);
     MK_ARITH_PRED(Z3_mk_ge,  OP_GE);
+    MK_ARITH_PRED(Z3_mk_divides, OP_IDIVIDES);
     MK_UNARY(Z3_mk_int2real, mk_c(c)->get_arith_fid(), OP_TO_REAL, SKIP);
     MK_UNARY(Z3_mk_real2int, mk_c(c)->get_arith_fid(), OP_TO_INT, SKIP);
     MK_UNARY(Z3_mk_is_int,   mk_c(c)->get_arith_fid(), OP_IS_INT, SKIP);
@@ -119,9 +120,9 @@ extern "C" {
         Z3_CATCH_RETURN(nullptr);
     }
 
-    Z3_bool Z3_API Z3_is_algebraic_number(Z3_context c, Z3_ast a) {
+    bool Z3_API Z3_is_algebraic_number(Z3_context c, Z3_ast a) {
         LOG_Z3_is_algebraic_number(c, a);
-        return mk_c(c)->autil().is_irrational_algebraic_numeral(to_expr(a)) ? Z3_TRUE : Z3_FALSE;
+        return mk_c(c)->autil().is_irrational_algebraic_numeral(to_expr(a));
     }
 
     Z3_ast Z3_API Z3_get_algebraic_number_lower(Z3_context c, Z3_ast a, unsigned precision) {

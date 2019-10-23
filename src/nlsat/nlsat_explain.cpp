@@ -157,32 +157,25 @@ namespace nlsat {
         ~imp() {
         }
 
-        void display(std::ostream & out, polynomial_ref const & p) const {
+        std::ostream& display(std::ostream & out, polynomial_ref const & p) const {
             m_pm.display(out, p, m_solver.display_proc());
+            return out;
         }
         
-        void display(std::ostream & out, polynomial_ref_vector const & ps, char const * delim = "\n") const {
+        std::ostream& display(std::ostream & out, polynomial_ref_vector const & ps, char const * delim = "\n") const {
             for (unsigned i = 0; i < ps.size(); i++) {
                 if (i > 0)
                     out << delim;
                 m_pm.display(out, ps.get(i), m_solver.display_proc());
             }
+            return out;
         }
         
-        void display(std::ostream & out, literal l) const { m_solver.display(out, l); }
-        void display_var(std::ostream & out, var x) const { m_solver.display(out, x); }
-        void display(std::ostream & out, unsigned sz, literal const * ls) {
-            for (unsigned i = 0; i < sz; i++) {
-                display(out, ls[i]);
-                out << "\n";
-            }
-        }
-        void display(std::ostream & out, literal_vector const & ls) {
-            display(out, ls.size(), ls.c_ptr()); 
-        }
-        void display(std::ostream & out, scoped_literal_vector const & ls) {
-            display(out, ls.size(), ls.c_ptr()); 
-        }
+        std::ostream& display(std::ostream & out, literal l) const { return m_solver.display(out, l); }
+        std::ostream& display_var(std::ostream & out, var x) const { return m_solver.display(out, x); }
+        std::ostream& display(std::ostream & out, unsigned sz, literal const * ls) const { return m_solver.display(out, sz, ls); }
+        std::ostream& display(std::ostream & out, literal_vector const & ls) const { return display(out, ls.size(), ls.c_ptr()); }
+        std::ostream& display(std::ostream & out, scoped_literal_vector const & ls) const { return display(out, ls.size(), ls.c_ptr()); }
 
         /**
            \brief Add literal to the result vector.
@@ -204,10 +197,10 @@ namespace nlsat {
            \brief Reset m_already_added vector using m_result
          */
         void reset_already_added() {
-            SASSERT(m_result != 0);
-            unsigned sz = m_result->size();
-            for (unsigned i = 0; i < sz; i++) 
-                m_already_added_literal[(*m_result)[i].index()] = false;
+            SASSERT(m_result != nullptr);
+            for (literal lit : *m_result) 
+                m_already_added_literal[lit.index()] = false;
+            SASSERT(check_already_added());
         }
 
 
@@ -215,9 +208,9 @@ namespace nlsat {
            \brief evaluate the given polynomial in the current interpretation.
            max_var(p) must be assigned in the current interpretation.
         */
-        int sign(polynomial_ref const & p) {
+        polynomial::sign sign(polynomial_ref const & p) {
             SASSERT(max_var(p) == null_var || m_assignment.is_assigned(max_var(p)));
-            int s = m_am.eval_sign_at(p, m_assignment);
+            auto s = m_am.eval_sign_at(p, m_assignment);
             TRACE("nlsat_explain", tout << "p: " << p << " var: " << max_var(p) << " sign: " << s << "\n";);
             return s;
         }
@@ -278,7 +271,7 @@ namespace nlsat {
             polynomial_ref f(m_pm);
             for (unsigned i = 0; i < num_factors; i++) {
                 f = m_factors.get(i);
-                if (sign(f) == 0) {
+                if (sign(f) == polynomial::sign_zero) {
                     m_zero_fs.push_back(m_factors.get(i));
                     m_is_even.push_back(false);
                 } 
@@ -331,7 +324,7 @@ namespace nlsat {
                     return; // lc is a nonzero constant
                 lc = m_pm.coeff(p, x, k, reduct);
                 if (!is_zero(lc)) {
-                    if (sign(lc) != 0)
+                    if (sign(lc) != polynomial::sign_zero)
                         return;
                     // lc is not the zero polynomial, but it vanished in the current interpretation.
                     // so we keep searching...
@@ -430,7 +423,7 @@ namespace nlsat {
                             bool lit_val  = l.sign() ? !atom_val : atom_val;
                             return lit_val ? true_literal : false_literal;
                         }
-                        else if (s == -1 && a->is_odd(i)) {
+                        else if (s < 0 && a->is_odd(i)) {
                             atom_sign = -atom_sign;
                         }
                         normalized = true;
@@ -967,8 +960,9 @@ namespace nlsat {
             if (ps.empty())
                 return;
             m_todo.reset();
-            for (unsigned i = 0; i < ps.size(); i++) 
-                m_todo.insert(ps.get(i));
+            for (poly* p : ps) {
+                m_todo.insert(p);
+            }
             var x = m_todo.remove_max_polys(ps);
             // Remark: after vanishing coefficients are eliminated, ps may not contain max_x anymore
             if (x < max_x)
@@ -991,8 +985,9 @@ namespace nlsat {
         }
 
         bool check_already_added() const {
-            for (unsigned i = 0; i < m_already_added_literal.size(); i++) {
-                SASSERT(m_already_added_literal[i] == false);
+            for (bool b : m_already_added_literal) {
+                (void)b;
+                SASSERT(!b);
             }
             return true;
         }
@@ -1070,7 +1065,7 @@ namespace nlsat {
         void simplify(literal l, eq_info & info, var max, scoped_literal & new_lit) {
             bool_var b = l.var();
             atom * a   = m_atoms[b];
-            SASSERT(a != 0);
+            SASSERT(a);
             if (a->is_root_atom()) {
                 new_lit = l;
                 return;
@@ -1099,19 +1094,24 @@ namespace nlsat {
                 modified_lit = true;
                 unsigned d;
                 m_pm.pseudo_remainder(f, info.m_eq, info.m_x, d, new_factor);
+                polynomial_ref        fact(f, m_pm), eq(const_cast<poly*>(info.m_eq), m_pm);
+                
+                TRACE("nlsat_simplify_core", tout << "d: " << d << " factor " << fact << " eq " << eq << " new factor " << new_factor << "\n";);
                 // adjust sign based on sign of lc of eq
-                if (d % 2 == 1 && // d is odd
-                    !is_even   && // degree of the factor is odd
-                    info.m_lc_sign < 0 // lc of the eq is negative 
-                    ) {
+                if (d % 2 == 1 &&         // d is odd
+                    !is_even   &&         // degree of the factor is odd
+                    info.m_lc_sign < 0) { // lc of the eq is negative 
                     atom_sign = -atom_sign; // flipped the sign of the current literal
+                    TRACE("nlsat_simplify_core", tout << "odd degree\n";);
                 }
                 if (is_const(new_factor)) {
-                    int s = sign(new_factor); 
-                    if (s == 0) {
+                    TRACE("nlsat_simplify_core", tout << "new factor is const\n";);
+                    polynomial::sign s = sign(new_factor); 
+                    if (s == polynomial::sign_zero) {
                         bool atom_val = a->get_kind() == atom::EQ;
                         bool lit_val  = l.sign() ? !atom_val : atom_val;
                         new_lit = lit_val ? true_literal : false_literal;
+                        TRACE("nlsat_simplify_core", tout << "zero sign: " << info.m_lc_const << "\n";);
                         if (!info.m_lc_const) {
                             // We have essentially shown the current factor must be zero If the leading coefficient is not zero.
                             // Note that, if the current factor is zero, then the whole polynomial is zero.
@@ -1123,6 +1123,7 @@ namespace nlsat {
                         return;
                     }
                     else {
+                        TRACE("nlsat_simplify_core", tout << "non-zero sign: " << info.m_lc_const << "\n";);
                         // We have shown the current factor is a constant MODULO the sign of the leading coefficient (of the equation used to rewrite the factor). 
                         if (!info.m_lc_const) {
                             // If the leading coefficient is not a constant, we must store this information as an extra assumption.
@@ -1135,7 +1136,7 @@ namespace nlsat {
                                 info.add_lc_ineq();
                             }
                         }
-                        if (s == -1 && !is_even) {
+                        if (s < 0 && !is_even) {
                             atom_sign = -atom_sign;
                         }
                     }
@@ -1162,18 +1163,21 @@ namespace nlsat {
                 new_lit = m_solver.mk_ineq_literal(new_k, new_factors.size(), new_factors.c_ptr(), new_factors_even.c_ptr());
                 if (l.sign())
                     new_lit.neg();
-                TRACE("nlsat_simplify_core", tout << "simplified literal:\n"; display(tout, new_lit); tout << "\n";);
+                TRACE("nlsat_simplify_core", tout << "simplified literal:\n"; display(tout, new_lit) << " " << m_solver.value(new_lit) << "\n";);
+                
                 if (max_var(new_lit) < max) {
-                    // The conflicting core may have redundant literals.
-                    // We should check whether new_lit is true in the current model, and discard it if that is the case
-                    VERIFY(m_solver.value(new_lit) != l_undef);
-                    if (m_solver.value(new_lit) == l_false)
+                    if (m_solver.value(new_lit) == l_true) {
+                        new_lit = l;
+                    }
+                    else {
                         add_literal(new_lit);
-                    new_lit = true_literal;
-                    return;
+                        new_lit = true_literal;
+                    }
                 }
-                new_lit = normalize(new_lit, max);
-                TRACE("nlsat_simplify_core", tout << "simplified literal after normalization:\n"; display(tout, new_lit); tout << "\n";);
+                else {
+                    new_lit = normalize(new_lit, max);
+                    TRACE("nlsat_simplify_core", tout << "simplified literal after normalization:\n"; display(tout, new_lit); tout << " " << m_solver.value(new_lit) << "\n";);
+                }
             }
             else {
                 new_lit = l;
@@ -1271,11 +1275,9 @@ namespace nlsat {
         var_vector m_select_tmp;
         ineq_atom * select_lower_stage_eq(scoped_literal_vector & C, var max) {
             var_vector & xs = m_select_tmp;
-            unsigned sz = C.size();
-            for (unsigned i = 0; i < sz; i++) {
-                literal l = C[i];
+            for (literal l : C) {
                 bool_var b = l.var();
-                atom * a   = m_atoms[b];
+                atom * a = m_atoms[b];
                 if (a->is_root_atom())
                     continue; // we don't rewrite root atoms
                 ineq_atom * _a = to_ineq_atom(a);
@@ -1284,9 +1286,7 @@ namespace nlsat {
                     poly * p = _a->p(j);
                     xs.reset();
                     m_pm.vars(p, xs);
-                    unsigned xs_sz = xs.size();
-                    for (unsigned k = 0; k < xs_sz; k++) {
-                        var y = xs[k];
+                    for (var y : xs) {
                         if (y >= max)
                             continue;
                         atom * eq = m_x2eq[y];
@@ -1333,6 +1333,7 @@ namespace nlsat {
                 poly * eq_p = eq->p(0);
                 VERIFY(simplify(C, eq_p, max));
                 // add equation as an assumption                
+                TRACE("nlsat_simpilfy_core", display(tout << "adding equality as assumption ", literal(eq->bvar(), true)); tout << "\n";);
                 add_literal(literal(eq->bvar(), true));
             }
         }
@@ -1357,9 +1358,9 @@ namespace nlsat {
                 var max = max_var(num, ls);
                 SASSERT(max != null_var);
                 normalize(m_core2, max);
-                TRACE("nlsat_explain", tout << "core after normalization\n"; display(tout, m_core2););
+                TRACE("nlsat_explain", display(tout << "core after normalization\n", m_core2) << "\n";);
                 simplify(m_core2, max);
-                TRACE("nlsat_explain", tout << "core after simplify\n"; display(tout, m_core2););
+                TRACE("nlsat_explain", display(tout << "core after simplify\n", m_core2) << "\n";);
                 main(m_core2.size(), m_core2.c_ptr());
                 m_core2.reset();
             }
@@ -1382,14 +1383,14 @@ namespace nlsat {
                 literal l = core[i];
                 atom * a  = m_atoms[l.var()];
                 SASSERT(a != 0);
-                interval_set_ref inf = m_evaluator.infeasible_intervals(a, l.sign());
+                interval_set_ref inf = m_evaluator.infeasible_intervals(a, l.sign(), nullptr);
                 r = ism.mk_union(inf, r);
                 if (ism.is_full(r)) {
                     // Done
                     return false;
                 }
             }
-            TRACE("nlsat_mininize", tout << "interval set after adding partial core:\n" << r << "\n";);
+            TRACE("nlsat_minimize", tout << "interval set after adding partial core:\n" << r << "\n";);
             if (todo.size() == 1) {
                 // Done
                 core.push_back(todo[0]);
@@ -1401,7 +1402,7 @@ namespace nlsat {
                 literal l = todo[i];
                 atom * a  = m_atoms[l.var()];
                 SASSERT(a != 0);
-                interval_set_ref inf = m_evaluator.infeasible_intervals(a, l.sign());
+                interval_set_ref inf = m_evaluator.infeasible_intervals(a, l.sign(), nullptr);
                 r = ism.mk_union(inf, r);
                 if (ism.is_full(r)) {
                     // literal l must be in the core
@@ -1425,15 +1426,15 @@ namespace nlsat {
             todo.reset(); core.reset();
             todo.append(num, ls);
             while (true) {
-                TRACE("nlsat_mininize", tout << "core minimization:\n"; display(tout, todo); tout << "\nCORE:\n"; display(tout, core););
+                TRACE("nlsat_minimize", tout << "core minimization:\n"; display(tout, todo); tout << "\nCORE:\n"; display(tout, core););
                 if (!minimize_core(todo, core))
                     break;
                 std::reverse(todo.begin(), todo.end());
-                TRACE("nlsat_mininize", tout << "core minimization:\n"; display(tout, todo); tout << "\nCORE:\n"; display(tout, core););
+                TRACE("nlsat_minimize", tout << "core minimization:\n"; display(tout, todo); tout << "\nCORE:\n"; display(tout, core););
                 if (!minimize_core(todo, core))
                     break;
             }
-            TRACE("nlsat_mininize", tout << "core:\n"; display(tout, core););
+            TRACE("nlsat_minimize", tout << "core:\n"; display(tout, core););
             r.append(core.size(), core.c_ptr());
         }
 
@@ -1452,12 +1453,12 @@ namespace nlsat {
         void operator()(unsigned num, literal const * ls, scoped_literal_vector & result) {
             SASSERT(check_already_added());
             SASSERT(num > 0);
-            TRACE("nlsat_explain", tout << "[explain] set of literals is infeasible in the current interpretation\n"; display(tout, num, ls););
+            TRACE("nlsat_explain", tout << "[explain] set of literals is infeasible in the current interpretation\n"; display(tout, num, ls) << "\n";);
             m_result = &result;
             process(num, ls);
             reset_already_added();
             m_result = nullptr;
-            TRACE("nlsat_explain", display(tout << "[explain] result\n", result););
+            TRACE("nlsat_explain", display(tout << "[explain] result\n", result) << "\n";);
             CASSERT("nlsat", check_already_added());
         }
 
@@ -1467,10 +1468,7 @@ namespace nlsat {
             m_result = &result;
             svector<literal> lits;
             TRACE("nlsat", tout << "project x" << x << "\n"; 
-                  for (unsigned i = 0; i < num; ++i) {
-                      m_solver.display(tout, ls[i]) << " ";
-                  }
-                  tout << "\n";
+                  m_solver.display(tout, num, ls);
                   m_solver.display(tout););
                   
             DEBUG_CODE(
@@ -1514,12 +1512,7 @@ namespace nlsat {
                 result.set(i, ~result[i]);
             }
             DEBUG_CODE(
-                TRACE("nlsat", 
-                      for (literal l : result) {
-                          m_solver.display(tout << " ", l);
-                      }
-                      tout << "\n";
-                      );
+                TRACE("nlsat", m_solver.display(tout, result.size(), result.c_ptr()) << "\n"; );
                 for (literal l : result) {
                     CTRACE("nlsat", l_true != m_solver.value(l), m_solver.display(tout, l) << " " << m_solver.value(l) << "\n";);
                     SASSERT(l_true == m_solver.value(l));
@@ -1627,12 +1620,12 @@ namespace nlsat {
             unsigned glb_index = 0, lub_index = 0;
             scoped_anum lub(m_am), glb(m_am), x_val(m_am);
             x_val = m_assignment.value(x);
+            bool glb_valid = false, lub_valid = false;
             for (unsigned i = 0; i < ps.size(); ++i) {
                 p = ps.get(i);
                 scoped_anum_vector & roots = m_roots_tmp;
                 roots.reset();
                 m_am.isolate_roots(p, undef_var_assignment(m_assignment, x), roots);
-                bool glb_valid = false, lub_valid = false;
                 for (auto const& r : roots) {
                     int s = m_am.compare(x_val, r);
                     SASSERT(s != 0);
@@ -1640,23 +1633,19 @@ namespace nlsat {
                     if (s < 0 && (!lub_valid || m_am.lt(r, lub))) {
                         lub_index = i;
                         m_am.set(lub, r);
+                        lub_valid = true;
                     }
 
                     if (s > 0 && (!glb_valid || m_am.lt(glb, r))) {
                         glb_index = i;
-                        m_am.set(glb, r);                        
+                        m_am.set(glb, r);
+                        glb_valid = true;
                     }
-                    lub_valid |= s < 0;
-                    glb_valid |= s > 0;
-                }
-                if (glb_valid) {
-                    ++num_glb;
-                }
-                if (lub_valid) {
-                    ++num_lub;
+                    if (s < 0) ++num_lub;
+                    if (s > 0) ++num_glb;
                 }
             }
-            TRACE("nlsat_explain", tout << ps << "\n";);
+            TRACE("nlsat_explain", tout << "glb: " << num_glb << " lub: " << num_lub << "\n" << lub_index << "\n" << glb_index << "\n" << ps << "\n";);
 
             if (num_lub == 0) {
                 project_plus_infinity(x, ps);

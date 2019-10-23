@@ -26,10 +26,11 @@
 #include "ast/rewriter/th_rewriter.h"
 #include "ast/rewriter/seq_rewriter.h"
 #include "ast/seq_decl_plugin.h"
+#include "model/value_factory.h"
 #include "smt/smt_theory.h"
 #include "smt/params/theory_str_params.h"
-#include "smt/proto_model/value_factory.h"
 #include "smt/smt_model_generator.h"
+#include "smt/smt_arith_value.h"
 #include<set>
 #include<stack>
 #include<vector>
@@ -164,7 +165,7 @@ protected:
     rational upper_bound;
 public:
     regex_automaton_under_assumptions() :
-        re_term(NULL), aut(NULL), polarity(false),
+        re_term(nullptr), aut(nullptr), polarity(false),
         assume_lower_bound(false), assume_upper_bound(false) {}
 
     regex_automaton_under_assumptions(expr * re_term, eautomaton * aut, bool polarity) :
@@ -546,6 +547,7 @@ protected:
     void process_concat_eq_unroll(expr * concat, expr * unroll);
 
     // regex automata and length-aware regex
+    void solve_regex_automata();
     unsigned estimate_regex_complexity(expr * re);
     unsigned estimate_regex_complexity_under_complement(expr * re);
     unsigned estimate_automata_intersection_difficulty(eautomaton * aut1, eautomaton * aut2);
@@ -570,6 +572,7 @@ protected:
     expr * z3str2_get_eqc_value(expr * n , bool & hasEqcValue);
     bool in_same_eqc(expr * n1, expr * n2);
     expr * collect_eq_nodes(expr * n, expr_ref_vector & eqcSet);
+    bool is_var(expr * e) const;
 
     bool get_arith_value(expr* e, rational& val) const;
     bool get_len_value(expr* e, rational& val);
@@ -580,6 +583,8 @@ protected:
     bool can_concat_eq_str(expr * concat, zstring& str);
     bool can_concat_eq_concat(expr * concat1, expr * concat2);
     bool check_concat_len_in_eqc(expr * concat);
+    void check_eqc_empty_string(expr * lhs, expr * rhs);
+    void check_eqc_concat_concat(std::set<expr*> & eqc_concat_lhs, std::set<expr*> & eqc_concat_rhs);
     bool check_length_consistency(expr * n1, expr * n2);
     bool check_length_const_string(expr * n1, expr * constStr);
     bool check_length_eq_var_concat(expr * n1, expr * n2);

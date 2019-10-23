@@ -67,7 +67,7 @@ extern "C" {
     MK_BV_BINARY(Z3_mk_ext_rotate_left, OP_EXT_ROTATE_LEFT);
     MK_BV_BINARY(Z3_mk_ext_rotate_right, OP_EXT_ROTATE_RIGHT);
 
-    Z3_ast mk_extract_core(Z3_context c, unsigned high, unsigned low, Z3_ast n) {
+    static Z3_ast mk_extract_core(Z3_context c, unsigned high, unsigned low, Z3_ast n) {
         expr * _n = to_expr(n);
         parameter params[2] = { parameter(high), parameter(low) };
         expr * a = mk_c(c)->m().mk_app(mk_c(c)->get_bv_fid(), OP_EXTRACT, 2, params, 1, &_n);
@@ -106,7 +106,7 @@ Z3_ast Z3_API NAME(Z3_context c, unsigned i, Z3_ast n) {                \
     MK_BV_PUNARY(Z3_mk_rotate_right, OP_ROTATE_RIGHT);
     MK_BV_PUNARY(Z3_mk_int2bv, OP_INT2BV);
 
-    Z3_ast Z3_API Z3_mk_bv2int(Z3_context c, Z3_ast n, Z3_bool is_signed) {
+    Z3_ast Z3_API Z3_mk_bv2int(Z3_context c, Z3_ast n, bool is_signed) {
         Z3_TRY;
         LOG_Z3_mk_bv2int(c, n, is_signed);
         RESET_ERROR_CODE();
@@ -174,19 +174,11 @@ Z3_ast Z3_API NAME(Z3_context c, unsigned i, Z3_ast n) {                \
         Z3_CATCH_RETURN(nullptr);
     }
 
-    Z3_ast Z3_mk_bvsmin(Z3_context c, Z3_sort s) {
+    static Z3_ast Z3_mk_bvsmin(Z3_context c, Z3_sort s) {
         return Z3_mk_bvmsb(c, s);
     }
 
-    Z3_ast Z3_mk_bvsmax(Z3_context c, Z3_sort s) {
-        return Z3_mk_bvnot(c, Z3_mk_bvmsb(c, s));
-    }
-
-    Z3_ast Z3_mk_bvumax(Z3_context c, Z3_sort s) {
-        return Z3_mk_int(c, -1, s);
-    }
-
-    Z3_ast Z3_API Z3_mk_bvadd_no_overflow(Z3_context c, Z3_ast t1, Z3_ast t2, Z3_bool is_signed) {
+    Z3_ast Z3_API Z3_mk_bvadd_no_overflow(Z3_context c, Z3_ast t1, Z3_ast t2, bool is_signed) {
         Z3_TRY;
         RESET_ERROR_CODE();
         if (is_signed) {
@@ -286,7 +278,7 @@ Z3_ast Z3_API NAME(Z3_context c, unsigned i, Z3_ast n) {                \
         Z3_CATCH_RETURN(nullptr);
     }
 
-    Z3_ast Z3_API Z3_mk_bvsub_no_underflow(Z3_context c, Z3_ast t1, Z3_ast t2, Z3_bool is_signed) {
+    Z3_ast Z3_API Z3_mk_bvsub_no_underflow(Z3_context c, Z3_ast t1, Z3_ast t2, bool is_signed) {
         Z3_TRY;
         RESET_ERROR_CODE();
         if (is_signed) {
@@ -311,7 +303,7 @@ Z3_ast Z3_API NAME(Z3_context c, unsigned i, Z3_ast n) {                \
         Z3_CATCH_RETURN(nullptr);
     }
 
-    Z3_ast Z3_API Z3_mk_bvmul_no_overflow(Z3_context c, Z3_ast n1, Z3_ast n2, Z3_bool is_signed) {
+    Z3_ast Z3_API Z3_mk_bvmul_no_overflow(Z3_context c, Z3_ast n1, Z3_ast n2, bool is_signed) {
         LOG_Z3_mk_bvmul_no_overflow(c, n1, n2, is_signed);
         RESET_ERROR_CODE();
         if (is_signed) {

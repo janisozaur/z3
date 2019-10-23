@@ -94,7 +94,6 @@ class lar_solver : public column_namer {
     var_register m_var_register;
     stacked_vector<ul_pair>                             m_columns_to_ul_pairs;
     vector<lar_base_constraint*>                        m_constraints;
-private:
     stacked_value<unsigned>                             m_constraint_count;
     // the set of column indices j such that bounds have changed for j
     int_set                                             m_columns_with_changed_bound;
@@ -178,6 +177,10 @@ public:
     void add_basic_var_to_core_fields();
 
     constraint_index add_var_bound(var_index j, lconstraint_kind kind, const mpq & right_side) ;
+
+    bool compare_values(var_index j, lconstraint_kind kind, const mpq & right_side);
+
+    bool compare_values(impq const& lhs, lconstraint_kind k, const mpq & rhs);
 
     void update_column_type_and_bound(var_index j, lconstraint_kind kind, const mpq & right_side, constraint_index constr_index);
 
@@ -311,7 +314,7 @@ public:
                                              impq &term_max);    
     // starting from a given feasible state look for the maximum of the term
     // return true if found and false if unbounded
-    lp_status maximize_term(unsigned ext_j ,
+    lp_status maximize_term(unsigned j_or_term,
                             impq &term_max);
     
 
@@ -360,7 +363,14 @@ public:
     void detect_rows_with_changed_bounds_for_column(unsigned j);
     
     void detect_rows_with_changed_bounds();
+    inline bool is_base(unsigned j) const {
+        return m_mpq_lar_core_solver.m_r_heading[j] >= 0;
+    }
 
+    bool move_non_basic_columns_to_bounds();
+
+    bool move_non_basic_column_to_bounds(unsigned j);
+    void set_value_for_nbasic_column(unsigned j, const impq & new_val);
     void update_x_and_inf_costs_for_columns_with_changed_bounds();
 
     void update_x_and_inf_costs_for_columns_with_changed_bounds_tableau();
@@ -397,7 +407,7 @@ public:
 
     column_type get_column_type(unsigned j) const;
 
-    std::string get_column_name(unsigned j) const;
+    std::string get_column_name(unsigned j) const override;
 
     bool all_constrained_variables_are_registered(const vector<std::pair<mpq, var_index>>& left_side);
 
@@ -458,6 +468,7 @@ public:
 
     std::ostream& print_implied_bound(const implied_bound& be, std::ostream & out) const;
 
+    std::ostream& print_values(std::ostream& out) const;
     
     mpq get_left_side_val(const lar_base_constraint &  cns, const std::unordered_map<var_index, mpq> & var_map) const;
 

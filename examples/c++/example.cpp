@@ -570,7 +570,7 @@ void tactic_example3() {
       - The choice combinator t | s first applies t to the given goal, if it fails then returns the result of s applied to the given goal.      
       - repeat(t) Keep applying the given tactic until no subgoal is modified by it.
       - repeat(t, n) Keep applying the given tactic until no subgoal is modified by it, or the number of iterations is greater than n.
-      - try_for(t, ms) Apply tactic t to the input goal, if it does not return in ms millisenconds, it fails.
+      - try_for(t, ms) Apply tactic t to the input goal, if it does not return in ms milliseconds, it fails.
       - with(t, params) Apply the given tactic using the given parameters.      
     */
     std::cout << "tactic example 3\n";
@@ -802,11 +802,19 @@ void tactic_qe() {
     std::cout << s.get_model() << "\n";
 }
 
-void visit(expr const & e) {
+void visit(std::vector<bool>& visited, expr const & e) {
+    if (visited.size() <= e.id()) {
+        visited.resize(e.id()+1, false);
+    }
+    if (visited[e.id()]) {
+        return;
+    }
+    visited[e.id()] = true;
+
     if (e.is_app()) {
         unsigned num = e.num_args();
         for (unsigned i = 0; i < num; i++) {
-            visit(e.arg(i));
+            visit(visited, e.arg(i));
         }
         // do something
         // Example: print the visited expression
@@ -814,7 +822,7 @@ void visit(expr const & e) {
         std::cout << "application of " << f.name() << ": " << e << "\n";
     }
     else if (e.is_quantifier()) {
-        visit(e.body());
+        visit(visited, e.body());
         // do something
     }
     else { 
@@ -827,12 +835,26 @@ void tst_visit() {
     std::cout << "visit example\n";
     context c;
 
+    // only one of the occurrences of x*x is visited 
+    // because they are the same subterms
     expr x = c.int_const("x");
     expr y = c.int_const("y");
     expr z = c.int_const("z");
-    expr f = x*x - y*y >= 0;
-    
-    visit(f);
+    expr f = x*x + x*x - y*y >= 0;
+    std::vector<bool> visited;
+    visit(visited, f);
+}
+
+void tst_numeral() {
+    std::cout << "numeral example\n";
+    context c;
+    expr x = c.real_val("1/3");
+    double d = 0;
+    if (!x.is_numeral(d)) {
+        std::cout << x << " is not recognized as a numeral\n";
+        return;
+    }
+    std::cout << x << " is " << d << "\n";
 }
 
 void incremental_example1() {
@@ -1155,6 +1177,14 @@ static void parse_example() {
     // expr b = c.parse_string("(benchmark tst :extrafuns ((x Int) (y Int)) :formula (> x y) :formula (> x 0))");
 }
 
+static void parse_string() {
+    std::cout << "parse string\n";
+    z3::context c;
+    z3::solver s(c);
+    s.from_string("(declare-const x Int)(assert (> x 10))");
+    std::cout << s.check() << "\n";
+}
+
 void mk_model_example() {
     context c;
 
@@ -1179,6 +1209,59 @@ void mk_model_example() {
     std::cout << m.eval(a + b < 2)<< std::endl;
 }
 
+void recfun_example() {
+    std::cout << "recfun example\n";
+    context c;    
+    expr x = c.int_const("x");
+    expr y = c.int_const("y");
+    expr b = c.bool_const("b");
+    sort I = c.int_sort();
+    sort B = c.bool_sort();    
+    func_decl f = recfun("f", I, B, I);
+    expr_vector args(c);
+    args.push_back(x); args.push_back(b);
+    c.recdef(f, args, ite(b, x, f(x + 1, !b)));
+    prove(f(x,c.bool_val(false)) > x);
+}
+
+static void string_values() {
+    context c;
+    expr s = c.string_val("abc\n\n\0\0", 7);
+    std::cout << s << "\n";
+    std::string s1 = s.get_string();
+    std::cout << s1 << "\n";
+}
+
+expr MakeStringConstant(context* context, std::string value) {
+    return context->string_val(value.c_str());
+}
+
+expr MakeStringFunction(context* c, std::string s) {
+    sort sort = c->string_sort();
+    symbol name = c->str_symbol(s.c_str());
+    return c->constant(name, sort);
+}
+
+static void string_issue_2298() {
+    context c;
+    solver s(c);
+    s.push();
+    expr func1 = MakeStringFunction(&c, "func1");
+    expr func2 = MakeStringFunction(&c, "func2");
+    
+    expr abc = MakeStringConstant(&c, "abc");
+    expr cde = MakeStringConstant(&c, "cde");
+    
+    expr length = func1.length();
+    expr five = c.int_val(5);
+    
+    s.add(func2 == abc || func1 == cde);
+    s.add(func2 == abc || func2 == cde);
+    s.add(length <= five);
+    
+    s.check();
+    s.pop();
+}
 
 int main() {
 
@@ -1212,6 +1295,7 @@ int main() {
         tactic_example9(); std::cout << "\n";
         tactic_qe(); std::cout << "\n";
         tst_visit(); std::cout << "\n";
+        tst_numeral(); std::cout << "\n";
         incremental_example1(); std::cout << "\n";
         incremental_example2(); std::cout << "\n";
         incremental_example3(); std::cout << "\n";
@@ -1226,7 +1310,11 @@ int main() {
         sudoku_example(); std::cout << "\n";
         consequence_example(); std::cout << "\n";
         parse_example(); std::cout << "\n";
+        parse_string(); std::cout << "\n";
         mk_model_example(); std::cout << "\n";
+        recfun_example(); std::cout << "\n";
+        string_values(); std::cout << "\n";
+        string_issue_2298(); std::cout << "\n";
         std::cout << "done\n";
     }
     catch (exception & ex) {

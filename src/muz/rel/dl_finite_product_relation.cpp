@@ -24,6 +24,7 @@ Revision History:
 #include "muz/rel/dl_table_relation.h"
 #include "muz/rel/dl_finite_product_relation.h"
 #include "ast/rewriter/bool_rewriter.h"
+#include "ast/rewriter/th_rewriter.h"
 
 namespace datalog {
 
@@ -487,7 +488,7 @@ namespace datalog {
 
             res->init(*res_table, joined_orelations, true);
 
-            if(m_tr_table_joined_cols.size()) {
+            if(!m_tr_table_joined_cols.empty()) {
                 //There were some shared variables between the table and the relation part.
                 //We enforce those equalities here.
                 if(!m_filter_tr_identities) {
@@ -1319,7 +1320,7 @@ namespace datalog {
 
                 if(!m_table_cond_columns.empty()) {
                     //We will keep the table variables that appear in the condition together 
-                    //with the index column and then iterate throught the tuples, evaluating 
+                    //with the index column and then iterate through the tuples, evaluating
                     //the rest of the condition on the inner relations.
                     unsigned_vector removed_cols;
                     unsigned table_data_col_cnt = r.m_table_sig.size()-1;
@@ -1409,6 +1410,11 @@ namespace datalog {
                 //create the condition with table values substituted in and relation values properly renamed
                 expr_ref inner_cond(m_manager);
                 inner_cond = m_subst(m_cond, m_renaming_for_inner_rel.size(), m_renaming_for_inner_rel.c_ptr());
+                th_rewriter rw(m_manager);
+                rw(inner_cond);
+                if (m_manager.is_false(inner_cond)) {
+                    continue;
+                }
 
                 relation_base * new_rel = old_rel.clone();
                 

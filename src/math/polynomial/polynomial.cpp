@@ -23,7 +23,6 @@ Notes:
 #include "util/id_gen.h"
 #include "util/buffer.h"
 #include "util/scoped_ptr_vector.h"
-#include "util/cooperate.h"
 #include "math/polynomial/upolynomial_factorization.h"
 #include "math/polynomial/polynomial_primes.h"
 #include "util/permutation.h"
@@ -67,7 +66,7 @@ namespace polynomial {
         bool first = true;
         out << "[";
         for (unsigned i = 0; i < m_var2degree.size(); ++ i) {
-            if (m_var2degree.size() > 0) {
+            if (!m_var2degree.empty()) {
                 if (!first) {
                     out << ",";
                 }
@@ -100,7 +99,7 @@ namespace polynomial {
 
         struct lt_var {
             bool operator()(power const & p1, power const & p2) {
-                // CMW: The assertion below does not hold on OSX, because
+                // CMW: The assertion below does not hold on macOS, because
                 // their implementation of std::sort will try to compare
                 // two items at the same index instead of comparing
                 // the indices directly. I suspect that the purpose of
@@ -375,10 +374,10 @@ namespace polynomial {
             return y;
         }
 
-        void display(std::ostream & out, display_var_proc const & proc = display_var_proc(), bool use_star = false) const {
+        std::ostream& display(std::ostream & out, display_var_proc const & proc = display_var_proc(), bool use_star = false) const {
             if (m_size == 0) {
                 out << "1";
-                return;
+                return out;
             }
             for (unsigned i = 0; i < m_size; i++) {
                 if (i > 0) {
@@ -391,6 +390,7 @@ namespace polynomial {
                 if (degree(i) > 1)
                     out << "^" << degree(i);
             }
+            return out;
         }
 
         void display_smt2(std::ostream & out, display_var_proc const & proc = display_var_proc()) const {
@@ -411,8 +411,8 @@ namespace polynomial {
                         proc(out, x);
                     }
                 }
+                out << ")";
             }
-            out << ")";
         }
 
         bool is_unit() const { return m_size == 0; }
@@ -796,7 +796,7 @@ namespace polynomial {
             CTRACE("polynomial", !m_monomials.empty(),
                    tout << "monomials leaked\n";
                    for (auto * m : m_monomials) {
-                       m->display(tout); tout << "\n";
+                       m->display(tout << m->id() << " " << m->ref_count() << " ") << "\n";
                    });
             SASSERT(m_monomials.empty());
             if (m_own_allocator)
@@ -1045,7 +1045,7 @@ namespace polynomial {
             return div_core<false>(m1->size(), m1->get_powers(), m2->size(), m2->get_powers(), m_tmp1);
         }
 
-        bool div(monomial const * m1, monomial const * m2, monomial * & r) {
+        bool div(monomial const * m1, monomial const * m2, monomial_ref & r) {
             if (m1->total_degree() < m2->total_degree())
                 return false;
             if (m1 == m2) {
@@ -1068,12 +1068,12 @@ namespace polynomial {
             g.reserve(std::min(sz1, sz2));
             r1.reserve(sz2); // r1 has at most num_args2 arguments
             r2.reserve(sz1); // r2 has at most num_args1 arguments
-            bool found   = false;
-            unsigned i1  = 0;
-            unsigned i2  = 0;
-            unsigned j1  = 0;
-            unsigned j2  = 0;
-            unsigned j3  = 0;
+            bool found  = false;
+            unsigned i1 = 0;
+            unsigned i2 = 0;
+            unsigned j1 = 0;
+            unsigned j2 = 0;
+            unsigned j3 = 0;
             while (true) {
                 if (i1 == sz1) {
                     if (found) {
@@ -1514,10 +1514,10 @@ namespace polynomial {
 
         bool is_zero() const { return m_size == 0; }
 
-        void display(std::ostream & out, mpzzp_manager & nm, display_var_proc const & proc = display_var_proc(), bool use_star = false) const {
+        std::ostream& display(std::ostream & out, mpzzp_manager & nm, display_var_proc const & proc = display_var_proc(), bool use_star = false) const {
             if (is_zero()) {
                 out << "0";
-                return;
+                return out;
             }
 
             for (unsigned i = 0; i < m_size; i++) {
@@ -1553,6 +1553,7 @@ namespace polynomial {
                     m(i)->display(out, proc, use_star);
                 }
             }
+            return out;
         }
 
         static void display_num_smt2(std::ostream & out, mpzzp_manager & nm, numeral const & a) {
@@ -1577,12 +1578,20 @@ namespace polynomial {
                 display_num_smt2(out, nm, a_i);
             }
             else if (nm.is_one(a_i)) {
-                m_i->display(out, proc);
+                if (m_i->size() == 1) {
+                    m_i->display_smt2(out, proc);
+                }
+                else {
+                    out << "(* ";
+                    m_i->display_smt2(out, proc);
+                    out << ")";
+                }
             }
             else {
                 out << "(* ";
                 display_num_smt2(out, nm, a_i);
-                m_i->display(out, proc);
+                out << " ";
+                m_i->display_smt2(out, proc);
                 out << ")";
             }
         }
@@ -2177,10 +2186,16 @@ namespace polynomial {
             }
 
             ~som_buffer_vector() {
+                clear();
+            }
+
+            void clear() {
+                reset();
                 unsigned sz = m_buffers.size();
                 for (unsigned i = 0; i < sz; i++) {
                     dealloc(m_buffers[i]);
                 }
+                m_buffers.reset();
             }
 
             void set_owner(imp * owner) {
@@ -2353,18 +2368,14 @@ namespace polynomial {
             m_manager.del(m_zero_numeral);
             m_mgcd_iterpolators.flush();
             m_mgcd_skeletons.reset();
-            DEBUG_CODE({
-                TRACE("polynomial",
-                      tout << "leaked polynomials\n";
-                      for (unsigned i = 0; i < m_polynomials.size(); i++) {
-                          if (m_polynomials[i] != 0) {
-                              m_polynomials[i]->display(tout, m_manager);
-                              tout << "\n";
-                          }
-                      });
-                m_polynomials.reset();
-            });
+            CTRACE("polynomial", !m_polynomials.empty(), 
+                   tout << "leaked polynomials\n";
+                   for (auto* p : m_polynomials) {
+                       if (p) p->display(tout, m_manager) << "\n";
+                   });
+            m_polynomials.reset();
             SASSERT(m_polynomials.empty());
+            m_iccp_ZpX_buffers.clear();
             m_monomial_manager->dec_ref();
         }
 
@@ -2372,7 +2383,6 @@ namespace polynomial {
             if (!m_limit.inc()) {
                 throw polynomial_exception(Z3_CANCELED_MSG);
             }
-            cooperate("polynomial");
         }
 
         mpzzp_manager & m() const { return const_cast<imp*>(this)->m_manager; }
@@ -2489,6 +2499,32 @@ namespace polynomial {
             SASSERT(m_polynomials[id] == 0);
             m_polynomials[id] = p;
             return p;
+        }
+
+        void gcd_simplify(polynomial * p) {
+            if (m_manager.finite()) return;
+            auto& m = m_manager.m();
+            unsigned sz = p->size();
+            if (sz == 0) 
+                return;
+            unsigned g = 0;
+            for (unsigned i = 0; i < sz; i++) {
+                if (!m.is_int(p->a(i))) {
+                    return;
+                }
+                int j = m.get_int(p->a(i));
+                if (j == INT_MIN || j == 1 || j == -1)
+                    return;
+                g = u_gcd(abs(j), g);
+                if (g == 1) 
+                    return;
+            }
+            scoped_mpz r(m), gg(m);
+            m.set(gg, g);
+            for (unsigned i = 0; i < sz; ++i) {
+                m.div_gcd(p->a(i), gg, r);
+                m.set(p->a(i), r);
+            }
         }
 
         polynomial * mk_zero() {
@@ -2642,7 +2678,7 @@ namespace polynomial {
             return mm().div(m1, m2);
         }
 
-        bool div(monomial const * m1, monomial const * m2, monomial * & r) {
+        bool div(monomial const * m1, monomial const * m2, monomial_ref & r) {
             return mm().div(m1, m2, r);
         }
 
@@ -4052,7 +4088,7 @@ namespace polynomial {
 
         // select a new random value in GF(p) that is not in vals, and store it in r
         void peek_fresh(scoped_numeral_vector const & vals, unsigned p, scoped_numeral & r) {
-            SASSERT(vals.size() < p); // otherwise we cant keep the fresh value
+            SASSERT(vals.size() < p); // otherwise we can't keep the fresh value
             unsigned sz = vals.size();
             while (true) {
                 m().set(r, rand() % p);
@@ -4149,7 +4185,7 @@ namespace polynomial {
                 TRACE("mgcd_detail", tout << "counter: " << counter << "\nidx: " << idx << "\nq: " << q << "\ndeg_q: " << deg_q << "\nmin_deg_q: " <<
                       min_deg_q << "\nnext_x: x" << vars[idx+1] << "\nmax_var(q): " << q_var << "\n";);
                 if (deg_q < min_deg_q) {
-                    TRACE("mgcd_detail", tout << "reseting...\n";);
+                    TRACE("mgcd_detail", tout << "resetting...\n";);
                     counter   = 0;
                     min_deg_q = deg_q;
                     // start from scratch
@@ -4493,7 +4529,7 @@ namespace polynomial {
                         }
                         #endif
                     }
-                    catch (sparse_mgcd_failed) {
+                    catch (const sparse_mgcd_failed &) {
                         flet<bool> use_prs(m_use_prs_gcd, false);
                         gcd_prs(u, v, x, r);
                     }
@@ -5138,7 +5174,7 @@ namespace polynomial {
                 }
                 monomial const * m_r = R.m(max_R);
                 numeral const & a_r  = R.a(max_R);
-                monomial * m_r_q = nullptr;
+                monomial_ref m_r_q(pm());
                 VERIFY(div(m_r, m_q, m_r_q));
                 TRACE("polynomial", tout << "m_r: "; m_r->display(tout); tout << "\nm_q: "; m_q->display(tout); tout << "\n";
                       if (m_r_q) { tout << "m_r_q: "; m_r_q->display(tout); tout << "\n"; });
@@ -5175,7 +5211,7 @@ namespace polynomial {
                 }
                 monomial const * m_r = R.m(max_R);
                 numeral const & a_r  = R.a(max_R);
-                monomial * m_r_q = nullptr;
+                monomial_ref m_r_q(pm());
                 bool q_div_r = div(m_r, m_q, m_r_q);
                 m_r_q_ref = m_r_q;
                 TRACE("polynomial", tout << "m_r: "; m_r->display(tout); tout << "\nm_q: "; m_q->display(tout); tout << "\n";
@@ -6035,7 +6071,7 @@ namespace polynomial {
                     return true;
                 }
                 monomial * m = C.m(curr_max);
-                monomial * m_i;
+                monomial_ref m_i(pm());
                 if (!div(m, m1, m_i)) {
                     // m1 does not divide maximal monomial of C.
                     R.reset();
@@ -7031,6 +7067,10 @@ namespace polynomial {
         return m_imp->hash(p);
     }
 
+    void manager::gcd_simplify(polynomial * p) {
+        m_imp->gcd_simplify(p);
+    }
+
     polynomial * manager::coeff(polynomial const * p, var x, unsigned k) {
         return m_imp->coeff(p, x, k);
     }
@@ -7075,7 +7115,7 @@ namespace polynomial {
         return m_imp->div(m1, m2);
     }
 
-    bool manager::div(monomial const * m1, monomial const * m2, monomial * & r) {
+    bool manager::div(monomial const * m1, monomial const * m2, monomial_ref & r) {
         return m_imp->div(m1, m2, r);
     }
 

@@ -25,7 +25,6 @@ Revision History:
 #include "tactic/tactical.h"
 #include "ast/arith_decl_plugin.h"
 #include "ast/for_each_expr.h"
-#include "util/cooperate.h"
 #include "ast/ast_smt2_pp.h"
 #include "ast/ast_pp.h"
 #include "util/id_gen.h"
@@ -1231,7 +1230,7 @@ class fm_tactic : public tactic {
         }
         
         // An integer variable x may be eliminated, if 
-        //   1- All variables in the contraints it occur are integer.
+        //   1- All variables in the constraints it occur are integer.
         //   2- The coefficient of x in all lower bounds (or all upper bounds) is unit.
         bool can_eliminate(var x) const {
             if (!is_int(x))
@@ -1543,7 +1542,6 @@ class fm_tactic : public tactic {
         }
         
         void checkpoint() {
-            cooperate("fm");
             if (m.canceled())
                 throw tactic_exception(m.limit().get_cancel_msg());
             if (memory::get_allocation_size() > m_max_memory)

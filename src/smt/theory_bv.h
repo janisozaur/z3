@@ -19,13 +19,13 @@ Revision History:
 #ifndef THEORY_BV_H_
 #define THEORY_BV_H_
 
-#include "smt/smt_theory.h"
-#include "smt/params/theory_bv_params.h"
 #include "ast/rewriter/bit_blaster/bit_blaster.h"
 #include "util/trail.h"
 #include "util/union_find.h"
 #include "ast/arith_decl_plugin.h"
-#include "smt/proto_model/numeral_factory.h"
+#include "model/numeral_factory.h"
+#include "smt/smt_theory.h"
+#include "smt/params/theory_bv_params.h"
 
 namespace smt {
     
@@ -124,6 +124,13 @@ namespace smt {
 
         value2var                m_fixed_var_table;
         
+        unsigned char            m_eq_activity[256];
+        unsigned char            m_diseq_activity[256];
+        svector<std::pair<theory_var, theory_var>> m_replay_diseq;
+        vector<vector<std::pair<theory_var, theory_var>>> m_diseq_watch;
+        svector<bool_var> m_diseq_watch_trail;
+        unsigned_vector   m_diseq_watch_lim;
+
         literal_vector           m_tmp_literals;
         svector<var_pos>         m_prop_queue;
         bool                     m_approximates_large_bvs;
@@ -233,6 +240,8 @@ namespace smt {
         bool include_func_interp(func_decl* f) override;
         svector<theory_var>   m_merge_aux[2]; //!< auxiliary vector used in merge_zero_one_bits
         bool merge_zero_one_bits(theory_var r1, theory_var r2);
+        bool can_propagate() override { return !m_replay_diseq.empty(); }
+        void propagate() override;
 
         // -----------------------------------
         //

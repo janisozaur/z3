@@ -31,7 +31,7 @@ solver_na2as::solver_na2as(ast_manager & m):
 solver_na2as::~solver_na2as() {}
 
 void solver_na2as::assert_expr_core2(expr * t, expr * a) {
-    if (a == 0) {
+    if (a == nullptr) {
         assert_expr_core(t);
     }
     else {
@@ -61,10 +61,10 @@ struct append_assumptions {
     }
 };
 
-lbool solver_na2as::check_sat(unsigned num_assumptions, expr * const * assumptions) {
+lbool solver_na2as::check_sat_core(unsigned num_assumptions, expr * const * assumptions) {
     append_assumptions app(m_assumptions, num_assumptions, assumptions);
     TRACE("solver_na2as", display(tout););
-    return check_sat_core(m_assumptions.size(), m_assumptions.c_ptr());
+    return check_sat_core2(m_assumptions.size(), m_assumptions.c_ptr());
 }
 
 lbool solver_na2as::check_sat_cc(const expr_ref_vector &assumptions, vector<expr_ref_vector> const &clauses) {

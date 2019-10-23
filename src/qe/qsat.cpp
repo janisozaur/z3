@@ -503,22 +503,22 @@ namespace qe {
             if (is_uninterp_const(a)) { // TBD generalize for uninterpreted functions.
                 vars.push_back(a);
             }
-            for (unsigned i = 0; i < a->get_num_args(); ++i) {
-                todo.push_back(a->get_arg(i));
+            for (expr* arg : *a) {
+                todo.push_back(arg);
             }
         }
     }
 
     bool pred_abs::validate_defs(model& model) const {
         bool valid = true;
-        obj_map<expr, expr*>::iterator it = m_pred2lit.begin(), end = m_pred2lit.end();
-        for (; it != end; ++it) {
+        for (auto& kv : m_pred2lit) {
             expr_ref val_a(m), val_b(m);
-            expr* a = it->m_key;
-            expr* b = it->m_value;
+            expr* a = kv.m_key;
+            expr* b = kv.m_value;
             val_a = model(a);
             val_b = model(b);
-            if (val_a != val_b) {
+            if ((m.is_true(val_a) && m.is_false(val_b)) || 
+                (m.is_false(val_a) && m.is_true(val_b))) {
                 TRACE("qe", 
                       tout << mk_pp(a, m) << " := " << val_a << "\n";
                       tout << mk_pp(b, m) << " := " << val_b << "\n";
@@ -549,8 +549,14 @@ namespace qe {
         solver& s() { return *m_solver; }
         solver const& s() const { return *m_solver; }
 
-        void reset() {
+        void init() {
             m_solver = mk_smt_solver(m, m_params, symbol::null);
+        }
+        void reset_statistics() {
+            init();
+        }
+        void clear() {
+            m_solver = nullptr;
         }
         void assert_expr(expr* e) {
             m_solver->assert_expr(e);
@@ -696,7 +702,7 @@ namespace qe {
             m_level -= num_scopes;
         }
         
-        void reset() override {
+        void clear() {
             m_st.reset();        
             m_fa.s().collect_statistics(m_st);
             m_ex.s().collect_statistics(m_st);        
@@ -707,9 +713,15 @@ namespace qe {
             m_pred_abs.reset();
             m_vars.reset();
             m_model = nullptr;
-            m_fa.reset();
-            m_ex.reset();        
             m_free_vars.reset();
+            m_fa.clear();
+            m_ex.clear();                    
+        }
+
+        void reset() override {
+            clear();
+            m_fa.init();
+            m_ex.init();                
         }    
         
         /**
@@ -1198,7 +1210,7 @@ namespace qe {
         }
         
         ~qsat() override {
-            reset();
+            clear();
         }
         
         void updt_params(params_ref const & p) override {
@@ -1294,8 +1306,8 @@ namespace qe {
         
         void reset_statistics() override {
             m_stats.reset();
-            m_fa.reset();
-            m_ex.reset();
+            m_fa.reset_statistics();
+            m_ex.reset_statistics();
         }
         
         void cleanup() override {

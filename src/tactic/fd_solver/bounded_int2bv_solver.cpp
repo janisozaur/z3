@@ -44,6 +44,7 @@ class bounded_int2bv_solver : public solver_na2as {
     mutable obj_map<func_decl, rational>   m_bv2offset;
     mutable bv2int_rewriter_ctx   m_rewriter_ctx;
     mutable bv2int_rewriter_star  m_rewriter;
+    mutable bool                  m_flushed;
 
 public:
 
@@ -56,8 +57,9 @@ public:
         m_solver(s),
         m_bv_fns(m),
         m_int_fns(m),
-        m_rewriter_ctx(m, p),
-        m_rewriter(m, m_rewriter_ctx)
+        m_rewriter_ctx(m, p, p.get_uint("max_bv_size", UINT_MAX)),
+        m_rewriter(m, m_rewriter_ctx),
+        m_flushed(false)
     {
         solver::updt_params(p);
         m_bounds.push_back(alloc(bound_manager, m));
@@ -137,9 +139,9 @@ public:
         }
     }
 
-    lbool check_sat_core(unsigned num_assumptions, expr * const * assumptions) override {
+    lbool check_sat_core2(unsigned num_assumptions, expr * const * assumptions) override {
         flush_assertions();
-        return m_solver->check_sat(num_assumptions, assumptions);
+        return m_solver->check_sat_core(num_assumptions, assumptions);
     }
 
     void updt_params(params_ref const & p) override { solver::updt_params(p); m_solver->updt_params(p);  }
@@ -155,6 +157,13 @@ public:
             if (mc) (*mc)(mdl);
         }
     }
+    void get_levels(ptr_vector<expr> const& vars, unsigned_vector& depth) override {
+        m_solver->get_levels(vars, depth);
+    }
+    expr_ref_vector get_trail() override {
+        return m_solver->get_trail();
+    }
+
     model_converter* external_model_converter() const {
         return concat(mc0(), local_model_converter());
     }
@@ -302,6 +311,7 @@ private:
 
     void flush_assertions() const {
         if (m_assertions.empty()) return;
+        m_flushed = true;
         bound_manager& bm = *m_bounds.back();
         for (expr* a : m_assertions) {
             bm(a);
@@ -331,13 +341,23 @@ private:
     }
 
     unsigned get_num_assertions() const override {
-        flush_assertions();
-        return m_solver->get_num_assertions();
+        if (m_flushed) {
+            flush_assertions();
+            return m_solver->get_num_assertions();
+        }
+        else {
+            return m_assertions.size();
+        }
     }
 
     expr * get_assertion(unsigned idx) const override {
-        flush_assertions();
-        return m_solver->get_assertion(idx);
+        if (m_flushed) {
+            flush_assertions();
+            return m_solver->get_assertion(idx);
+        }
+        else {
+            return m_assertions.get(idx);
+        }
     }
 
 };

@@ -28,13 +28,16 @@ Revision History:
 #include "smt/theory_array_full.h"
 #include "smt/theory_bv.h"
 #include "smt/theory_datatype.h"
+#include "smt/theory_recfun.h"
 #include "smt/theory_dummy.h"
 #include "smt/theory_dl.h"
 #include "smt/theory_seq_empty.h"
 #include "smt/theory_seq.h"
+#include "smt/theory_special_relations.h"
 #include "smt/theory_pb.h"
 #include "smt/theory_fpa.h"
 #include "smt/theory_str.h"
+#include "smt/theory_jobscheduler.h"
 
 namespace smt {
 
@@ -119,6 +122,8 @@ namespace smt {
             setup_UFLRA();
         else if (m_logic == "LRA")
             setup_LRA();
+        else if (m_logic == "CSP")
+            setup_CSP();
         else if (m_logic == "QF_FP")
             setup_QF_FP();
         else if (m_logic == "QF_FPBV" || m_logic == "QF_BVFP")
@@ -196,6 +201,8 @@ namespace smt {
                 setup_QF_DT();
             else if (m_logic == "LRA")
                 setup_LRA();
+            else if (m_logic == "CSP")
+                setup_CSP();
             else 
                 setup_unknown(st);
         }
@@ -203,7 +210,7 @@ namespace smt {
 
     static void check_no_arithmetic(static_features const & st, char const * logic) {
         if (st.m_num_arith_ineqs > 0 || st.m_num_arith_terms > 0 || st.m_num_arith_eqs > 0) 
-            throw default_exception("Benchmark constains arithmetic, but specified loging does not support it.");
+            throw default_exception("Benchmark constrains arithmetic, but specified logic does not support it.");
     }
 
     void setup::setup_QF_UF() {
@@ -217,6 +224,7 @@ namespace smt {
     void setup::setup_QF_DT() {
         setup_QF_UF();
         setup_datatypes();
+        setup_recfuns();
     }
 
     void setup::setup_QF_BVRE() {
@@ -309,6 +317,7 @@ namespace smt {
                 // }
                 // else {
                 TRACE("rdl_bug", tout << "using theory_mi_arith\n";);
+                //setup_lra_arith();
                 m_context.register_plugin(alloc(smt::theory_mi_arith, m_manager, m_params));
                 // }
             }
@@ -400,7 +409,7 @@ namespace smt {
         m_params.m_nnf_cnf          = false;
         m_params.m_arith_eq_bounds  = true;
         m_params.m_arith_eq2ineq    = true;
-        m_params.m_phase_selection  = PS_ALWAYS_FALSE;
+        // m_params.m_phase_selection  = PS_THEORY;
         m_params.m_restart_strategy = RS_GEOMETRIC;
         m_params.m_restart_factor   = 1.5;
         m_params.m_restart_adaptive = false;
@@ -433,7 +442,7 @@ namespace smt {
             }
         }
         m_params.m_arith_eq_bounds  = true;
-        m_params.m_phase_selection  = PS_ALWAYS_FALSE;
+        // m_params.m_phase_selection  = PS_THEORY;
         m_params.m_restart_strategy = RS_GEOMETRIC;
         m_params.m_restart_factor   = 1.5;
         m_params.m_restart_adaptive = false;
@@ -447,13 +456,14 @@ namespace smt {
     }
 
     void setup::setup_QF_LRA() {
-        TRACE("setup", tout << "setup_QF_LRA(st)\n";);
+        TRACE("setup", tout << "setup_QF_LRA()\n";);
         m_params.m_relevancy_lvl       = 0;
         m_params.m_arith_eq2ineq       = true;
         m_params.m_arith_reflect       = false;
         m_params.m_arith_propagate_eqs = false;
         m_params.m_eliminate_term_ite  = true;
         m_params.m_nnf_cnf             = false;
+        m_params.m_phase_selection       = PS_THEORY;
         setup_lra_arith();
     }
 
@@ -469,13 +479,10 @@ namespace smt {
             m_params.m_relevancy_lvl       = 2;
             m_params.m_relevancy_lemma     = false;
         }
-        if (st.m_cnf) {
-            m_params.m_phase_selection = PS_CACHING_CONSERVATIVE2;
-        }
-        else {
+        m_params.m_phase_selection       = PS_THEORY;
+        if (!st.m_cnf) {
             m_params.m_restart_strategy      = RS_GEOMETRIC;
             m_params.m_arith_stronger_lemmas = false;
-            m_params.m_phase_selection       = PS_ALWAYS_FALSE;
             m_params.m_restart_adaptive      = false;
         }
         m_params.m_arith_small_lemma_size = 32;
@@ -519,13 +526,12 @@ namespace smt {
             m_params.m_arith_eq2ineq          = true;
             m_params.m_eliminate_term_ite     = true;
             // if (st.m_num_exprs < 5000 && st.m_num_ite_terms < 50) { // safeguard to avoid high memory consumption
-            // TODO: implement analsysis function to decide where lift ite is too expensive.
+            // TODO: implement analysis function to decide where lift ite is too expensive.
             //    m_params.m_lift_ite           = LI_FULL;
             // }
         } 
         else {
             m_params.m_eliminate_term_ite   = true;
-            m_params.m_phase_selection      = PS_CACHING;
             m_params.m_restart_adaptive     = false;
             m_params.m_restart_strategy     = RS_GEOMETRIC;
             m_params.m_restart_factor       = 1.5;
@@ -727,6 +733,13 @@ namespace smt {
         else if (m_params.m_string_solver == "auto") {
             setup_unknown();
         }
+ 
+        else if (m_params.m_string_solver == "empty") {
+            m_context.register_plugin(alloc(smt::theory_seq_empty, m_manager));
+        }
+        else if (m_params.m_string_solver == "none") {
+            // don't register any solver.
+        }
         else {
             throw default_exception("invalid parameter for smt.string_solver, valid options are 'z3str3', 'seq', 'auto'");
         }
@@ -746,6 +759,7 @@ namespace smt {
     }
 
     void setup::setup_lra_arith() {
+        // m_context.register_plugin(alloc(smt::theory_mi_arith, m_manager, m_params));
         m_context.register_plugin(alloc(smt::theory_lra, m_manager, m_params));
     }
 
@@ -829,7 +843,7 @@ namespace smt {
                 m_context.register_plugin(alloc(smt::theory_mi_arith, m_manager, m_params));
             break;
         case AS_NEW_ARITH:
-            if (st.m_num_non_linear != 0) 
+            if (st.m_num_non_linear != 0 && st.m_has_int) 
                 m_context.register_plugin(alloc(smt::theory_mi_arith, m_manager, m_params));
             else 
                 setup_lra_arith();
@@ -873,6 +887,12 @@ namespace smt {
         m_context.register_plugin(alloc(theory_datatype, m_manager, m_params));
     }
 
+    void setup::setup_recfuns() {
+        TRACE("recfun", tout << "registering theory recfun...\n";);
+        theory_recfun * th = alloc(theory_recfun, m_manager);
+        m_context.register_plugin(th);
+    }
+
     void setup::setup_dl() {
         m_context.register_plugin(mk_theory_dl(m_manager));
     }
@@ -885,6 +905,12 @@ namespace smt {
         else if (m_params.m_string_solver == "seq") {
             setup_seq();
         } 
+        else if (m_params.m_string_solver == "empty") {
+            m_context.register_plugin(alloc(smt::theory_seq_empty, m_manager));
+        }
+        else if (m_params.m_string_solver == "none") {
+            // don't register any solver.
+        }
         else if (m_params.m_string_solver == "auto") {
             if (st.m_has_seq_non_str) {
                 setup_seq();
@@ -916,6 +942,15 @@ namespace smt {
         m_context.register_plugin(alloc(smt::theory_seq, m_manager, m_params));
     }
 
+    void setup::setup_CSP() {
+        setup_unknown();
+        m_context.register_plugin(alloc(smt::theory_jobscheduler, m_manager));
+    }
+
+    void setup::setup_special_relations() {
+        m_context.register_plugin(alloc(smt::theory_special_relations, m_manager));
+    }
+
     void setup::setup_unknown() {
         static_features st(m_manager);
         ptr_vector<expr> fmls;
@@ -926,10 +961,12 @@ namespace smt {
         setup_arrays();
         setup_bv();
         setup_datatypes();
+        setup_recfuns();
         setup_dl();
         setup_seq_str(st);
         setup_card();
         setup_fpa();
+        if (st.m_has_sr) setup_special_relations();
     }
 
     void setup::setup_unknown(static_features & st) {
@@ -945,6 +982,8 @@ namespace smt {
             setup_seq_str(st);
             setup_card();
             setup_fpa();
+            setup_recfuns();
+            if (st.m_has_sr) setup_special_relations();
             return;
         }
 

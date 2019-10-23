@@ -618,7 +618,7 @@ namespace smt {
         
         th_var v1 = null_theory_var, v2 = null_theory_var;
         bool   pos1 = true, pos2 = true;
-        if (terms.size() >= 1) {
+        if (!terms.empty()) {
             v1 = terms[0].first;
             pos1 = terms[0].second.is_one();
             SASSERT(v1 != null_theory_var);
@@ -777,11 +777,11 @@ namespace smt {
         enforce_parity();
         m_graph.set_to_zero(to_var(m_zero), neg(to_var(m_zero)));
         compute_delta();   
-        DEBUG_CODE(validate_model(););
+        DEBUG_CODE(model_validate(););
     }
 
     template<typename Ext>    
-    void theory_utvpi<Ext>::validate_model() {
+    void theory_utvpi<Ext>::model_validate() {
         context& ctx = get_context();
         unsigned sz = m_atoms.size();
         for (unsigned i = 0; i < sz; ++i) {

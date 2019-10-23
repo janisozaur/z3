@@ -387,7 +387,7 @@ namespace qe {
             for (row const& r : rows) {
                 expr_ref_vector ts(m);
                 expr_ref t(m), s(m), val(m);
-                if (r.m_vars.size() == 0) {
+                if (r.m_vars.empty()) {
                     continue;
                 }
                 if (r.m_vars.size() == 1 && r.m_vars[0].m_coeff.is_neg() && r.m_type != opt::t_mod) {
@@ -603,6 +603,11 @@ namespace qe {
     opt::inf_eps arith_project_plugin::maximize(expr_ref_vector const& fmls, model& mdl, app* t, expr_ref& ge, expr_ref& gt) {
         return m_imp->maximize(fmls, mdl, t, ge, gt);
     }
+
+    void arith_project_plugin::saturate(model& model, func_decl_ref_vector const& shared, expr_ref_vector& lits) {
+        UNREACHABLE();
+    }
+
 
     bool arith_project(model& model, app* var, expr_ref_vector& lits) {
         ast_manager& m = lits.get_manager();

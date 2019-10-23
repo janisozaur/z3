@@ -44,6 +44,12 @@ namespace polynomial {
     typedef svector<var> var_vector;
     class monomial;
 
+    typedef enum { sign_neg = -1, sign_zero = 0, sign_pos = 1} sign;
+    inline sign operator-(sign s) { switch (s) { case sign_neg: return sign_pos; case sign_pos: return sign_neg; default: return sign_zero; } };
+    inline sign to_sign(int s) { return s == 0 ? sign_zero : (s > 0 ? sign_pos : sign_neg); }
+    inline sign operator*(sign a, sign b) { return to_sign((int)a * (int)b); }
+    inline bool is_zero(sign s) { return s == sign_zero; }
+
     int lex_compare(monomial const * m1, monomial const * m2);
     int lex_compare2(monomial const * m1, monomial const * m2, var min_var);
     int graded_lex_compare(monomial const * m1, monomial const * m2);
@@ -131,12 +137,12 @@ namespace polynomial {
             ~factors();
             
             /**
-               \brief Numer of distinct factors (not counting multiplicities).
+               \brief Number of distinct factors (not counting multiplicities).
             */
             unsigned distinct_factors() const { return m_factors.size(); }
             
             /**
-               \brief Numer of distinct factors (counting multiplicities).
+               \brief Number of distinct factors (counting multiplicities).
             */
             unsigned total_factors() const { return m_total_factors; }
 
@@ -278,6 +284,12 @@ namespace polynomial {
         */
         static unsigned id(polynomial const * p);
         
+
+        /**
+           \brief Normalize coefficients by dividing by their gcd
+        */
+        void gcd_simplify(polynomial* p);
+
         /**
            \brief Return true if \c m is the unit monomial.
         */
@@ -644,7 +656,7 @@ namespace polynomial {
         /**
            \brief Return true if m2 divides m1, and store the result in r.
         */
-        bool div(monomial const * m1, monomial const * m2, monomial * & r);
+        bool div(monomial const * m1, monomial const * m2, monomial_ref & r);
 
         /**
            \brief Newton interpolation algorithm for multivariate polynomials.

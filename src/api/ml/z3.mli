@@ -736,11 +736,17 @@ sig
   (** Create an existential Quantifier. *)
   val mk_exists_const : context -> Expr.expr list -> Expr.expr -> int option -> Pattern.pattern list -> Expr.expr list -> Symbol.symbol option -> Symbol.symbol option -> quantifier
 
-  (** Create a Quantifier. *)
-  val mk_quantifier : context -> Sort.sort list -> Symbol.symbol list -> Expr.expr -> int option -> Pattern.pattern list -> Expr.expr list -> Symbol.symbol option -> Symbol.symbol option -> quantifier
+  (** Create a lambda binding. *)
+  val mk_lambda_const : context -> Expr.expr list -> Expr.expr -> quantifier
+
+  (** Create a lambda binding where bound variables are given by symbols and sorts *)
+  val mk_lambda : context -> (Symbol.symbol * Sort.sort) list -> Expr.expr -> quantifier
 
   (** Create a Quantifier. *)
-  val mk_quantifier : context -> bool -> Expr.expr list -> Expr.expr -> int option -> Pattern.pattern list -> Expr.expr list -> Symbol.symbol option -> Symbol.symbol option -> quantifier
+  val mk_quantifier : context -> bool -> Sort.sort list -> Symbol.symbol list -> Expr.expr -> int option -> Pattern.pattern list -> Expr.expr list -> Symbol.symbol option -> Symbol.symbol option -> quantifier
+
+  (** Create a Quantifier. *)
+  val mk_quantifier_const : context -> bool -> Expr.expr list -> Expr.expr -> int option -> Pattern.pattern list -> Expr.expr list -> Symbol.symbol option -> Symbol.symbol option -> quantifier
 
   (** A string representation of the quantifier. *)
   val to_string : quantifier -> string
@@ -1153,7 +1159,7 @@ sig
     val mk_sort : context -> Sort.sort
 
     (** Get a big_int from an integer numeral *)
-    val get_big_int : Expr.expr -> Big_int.big_int
+    val get_big_int : Expr.expr -> Z.t
 
     (** Returns a string representation of a numeral. *)
     val numeral_to_string : Expr.expr -> string
@@ -1211,7 +1217,7 @@ sig
     val get_denominator : Expr.expr -> Expr.expr
 
     (** Get a ratio from a real numeral *)
-    val get_ratio : Expr.expr -> Ratio.ratio
+    val get_ratio : Expr.expr -> Q.t
 
     (** Returns a string representation in decimal notation.
         The result has at most as many decimal places as indicated by the int argument.*)
@@ -3250,16 +3256,6 @@ sig
       The query is unsatisfiable if there are no derivations satisfying any of the relations. *)
   val query_r : fixedpoint -> FuncDecl.func_decl list -> Solver.status
 
-  (** Creates a backtracking point.
-      {!pop} *)
-  val push : fixedpoint -> unit
-
-  (** Backtrack one backtracking point.
-
-      Note that an exception is thrown if Pop is called without a corresponding [Push]</remarks>
-      {!push} *)
-  val pop : fixedpoint -> unit
-
   (** Update named rule into in the fixedpoint solver. *)
   val update_rule : fixedpoint -> Expr.expr -> Symbol.symbol -> unit
 
@@ -3466,3 +3462,11 @@ val enable_trace : string -> unit
    Remarks: It is a NOOP otherwise.
 *)
 val disable_trace : string -> unit
+
+
+(** Memory management **)
+module Memory :
+sig
+  (** Reset all allocated resources **)
+  val reset : unit -> unit
+end

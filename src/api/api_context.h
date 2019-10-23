@@ -20,23 +20,30 @@ Revision History:
 #ifndef API_CONTEXT_H_
 #define API_CONTEXT_H_
 
-#include "api/z3.h"
+
+#include "util/hashtable.h"
+#include "util/mutex.h"
+#include "util/event_handler.h"
 #include "ast/ast.h"
-#include "api/api_util.h"
 #include "ast/arith_decl_plugin.h"
 #include "ast/bv_decl_plugin.h"
 #include "ast/seq_decl_plugin.h"
 #include "ast/datatype_decl_plugin.h"
 #include "ast/dl_decl_plugin.h"
 #include "ast/fpa_decl_plugin.h"
-#include "smt/smt_kernel.h"
+#include "ast/recfun_decl_plugin.h"
+#include "ast/special_relations_decl_plugin.h"
+#include "ast/rewriter/seq_rewriter.h"
 #include "smt/params/smt_params.h"
-#include "util/event_handler.h"
+#include "smt/smt_kernel.h"
+#include "smt/smt_solver.h"
 #include "cmd_context/tactic_manager.h"
 #include "cmd_context/context_params.h"
 #include "cmd_context/cmd_context.h"
+#include "solver/solver.h"
+#include "api/z3.h"
+#include "api/api_util.h"
 #include "api/api_polynomial.h"
-#include "util/hashtable.h"
 
 namespace smtlib {
     class parser;
@@ -48,6 +55,24 @@ namespace realclosure {
 
 namespace api {
        
+    class seq_expr_solver : public expr_solver {
+        ast_manager& m;
+        params_ref const& p;
+        solver_ref   s;
+    public:
+        seq_expr_solver(ast_manager& m, params_ref const& p): m(m), p(p) {}
+        lbool check_sat(expr* e) {
+            if (!s) {
+                s = mk_smt_solver(m, p, symbol("ALL"));
+            }
+            s->push();
+            s->assert_expr(e);
+            lbool r = s->check_sat();
+            s->pop(1);
+            return r;
+        }
+    };
+
 
     class context : public tactic_manager {
         struct add_plugins {  add_plugins(ast_manager & m); };
@@ -56,12 +81,14 @@ namespace api {
         scoped_ptr<ast_manager>    m_manager;
         scoped_ptr<cmd_context>    m_cmd;
         add_plugins                m_plugins;
+        mutex                      m_mux;
 
         arith_util                 m_arith_util;
         bv_util                    m_bv_util;
         datalog::dl_decl_util      m_datalog_util;
         fpa_util                   m_fpa_util;
         seq_util                   m_sutil;
+        recfun::util               m_recfun;
 
         // Support for old solver API
         smt_params                 m_fparams;
@@ -83,6 +110,7 @@ namespace api {
         family_id                  m_pb_fid;
         family_id                  m_fpa_fid;
         family_id                  m_seq_fid;
+        family_id                  m_special_relations_fid;
         datatype_decl_plugin *     m_dt_plugin;
         
         std::string                m_string_buffer; // temporary buffer used to cache strings sent to the "external" world.
@@ -128,6 +156,7 @@ namespace api {
         fpa_util & fpautil() { return m_fpa_util; }
         datatype_util& dtutil() { return m_dt_plugin->u(); }
         seq_util& sutil() { return m_sutil; }
+        recfun::util& recfun() { return m_recfun; }
         family_id get_basic_fid() const { return m_basic_fid; }
         family_id get_array_fid() const { return m_array_fid; }
         family_id get_arith_fid() const { return m_arith_fid; }
@@ -138,6 +167,7 @@ namespace api {
         family_id get_fpa_fid() const { return m_fpa_fid; }
         family_id get_seq_fid() const { return m_seq_fid; }
         datatype_decl_plugin * get_dt_plugin() const { return m_dt_plugin; }
+        family_id get_special_relations_fid() const { return m_special_relations_fid; }
 
         Z3_error_code get_error_code() const { return m_error_code; }
         void reset_error_code();
@@ -154,8 +184,9 @@ namespace api {
 
         // Store a copy of str in m_string_buffer, and return a reference to it.
         // This method is used to communicate local/internal strings with the "external world"
+        char * mk_external_string(char const * str, unsigned n);
         char * mk_external_string(char const * str);
-        char * mk_external_string(std::string const & str);
+        char * mk_external_string(std::string && str);
 
         // Create a numeral of the given sort
         expr * mk_numeral_core(rational const & n, sort * s);

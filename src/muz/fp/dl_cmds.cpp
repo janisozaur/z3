@@ -332,10 +332,8 @@ public:
 private:
     void set_background(cmd_context& ctx) {
         datalog::context& dlctx = m_dl_ctx->dlctx();
-        ptr_vector<expr>::const_iterator it  = ctx.begin_assertions();
-        ptr_vector<expr>::const_iterator end = ctx.end_assertions();
-        for (; it != end; ++it) {
-            dlctx.assert_expr(*it);
+        for (expr * e : ctx.assertions()) {
+            dlctx.assert_expr(e);
         }
     }
 
@@ -346,9 +344,6 @@ private:
             expr_ref query_result(dlctx.get_answer_as_formula(), m);
             sbuffer<symbol> var_names;
             unsigned num_decls = 0;
-            if (is_quantifier(m_target)) {
-                num_decls = to_quantifier(m_target)->get_num_decls();
-            }
             ctx.display(ctx.regular_stream(), query_result, 0, num_decls, "X", var_names);
             ctx.regular_stream() << std::endl;
         }
@@ -481,44 +476,6 @@ public:
     }
 };
 
-/**
-   \brief fixedpoint-push command.
-*/
-class dl_push_cmd : public cmd {
-    ref<dl_context> m_dl_ctx;
-public:
-    dl_push_cmd(dl_context * dl_ctx):
-      cmd("fixedpoint-push"),
-      m_dl_ctx(dl_ctx)
-    {}
-
-    char const * get_usage() const override { return ""; }
-    char const * get_descr(cmd_context & ctx) const override { return "push the fixedpoint context"; }
-    unsigned get_arity() const override { return 0; }
-    void execute(cmd_context & ctx) override {
-        m_dl_ctx->push();
-    }
-};
-
-/**
-   \brief fixedpoint-pop command.
-*/
-class dl_pop_cmd : public cmd {
-    ref<dl_context> m_dl_ctx;
-public:
-    dl_pop_cmd(dl_context * dl_ctx):
-      cmd("fixedpoint-pop"),
-      m_dl_ctx(dl_ctx)
-    {}
-
-    char const * get_usage() const override { return ""; }
-    char const * get_descr(cmd_context & ctx) const override { return "pop the fixedpoint context"; }
-    unsigned get_arity() const override { return 0; }
-    void execute(cmd_context & ctx) override {
-        m_dl_ctx->pop();
-    }
-};
-
 
 static void install_dl_cmds_aux(cmd_context& ctx, dl_collected_cmds* collected_cmds) {
     dl_context * dl_ctx = alloc(dl_context, ctx, collected_cmds);
@@ -526,8 +483,6 @@ static void install_dl_cmds_aux(cmd_context& ctx, dl_collected_cmds* collected_c
     ctx.insert(alloc(dl_query_cmd, dl_ctx));
     ctx.insert(alloc(dl_declare_rel_cmd, dl_ctx));
     ctx.insert(alloc(dl_declare_var_cmd, dl_ctx));
-    ctx.insert(alloc(dl_push_cmd, dl_ctx));
-    ctx.insert(alloc(dl_pop_cmd, dl_ctx));
 }
 
 void install_dl_cmds(cmd_context & ctx) {

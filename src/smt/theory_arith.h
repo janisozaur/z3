@@ -20,24 +20,24 @@ Revision History:
 #ifndef THEORY_ARITH_H_
 #define THEORY_ARITH_H_
 
-#include "smt/smt_theory.h"
 #include "util/map.h"
 #include "util/heap.h"
 #include "util/nat_set.h"
 #include "util/inf_rational.h"
 #include "util/s_integer.h"
 #include "util/inf_s_integer.h"
+#include "util/obj_pair_hashtable.h"
+#include "util/uint_set.h"
 #include "ast/arith_decl_plugin.h"
+#include "model/numeral_factory.h"
+#include "smt/smt_theory.h"
 #include "smt/params/theory_arith_params.h"
 #include "smt/arith_eq_adapter.h"
-#include "smt/proto_model/numeral_factory.h"
 #include "smt/smt_context.h"
-#include "util/obj_pair_hashtable.h"
 #include "smt/old_interval.h"
-#include "math/grobner/grobner.h"
 #include "smt/arith_eq_solver.h"
 #include "smt/theory_opt.h"
-#include "util/uint_set.h"
+#include "math/grobner/grobner.h"
 
 namespace smt {
     
@@ -156,9 +156,15 @@ namespace smt {
             row_entry & operator[](unsigned idx) { return m_entries[idx]; }
             row_entry const & operator[](unsigned idx) const { return m_entries[idx]; }
             typename vector<row_entry>::iterator begin_entries() { return m_entries.begin(); }
-            const typename vector<row_entry>::const_iterator begin_entries() const { return m_entries.begin(); }
+            typename vector<row_entry>::const_iterator begin_entries() const { return m_entries.begin(); }
             typename vector<row_entry>::iterator end_entries() { return m_entries.end(); }
-            const typename vector<row_entry>::const_iterator end_entries() const { return m_entries.end(); }
+            typename vector<row_entry>::const_iterator end_entries() const { return m_entries.end(); }
+
+            typename vector<row_entry>::iterator begin() { return m_entries.begin(); }
+            typename vector<row_entry>::const_iterator begin() const { return m_entries.begin(); }
+            typename vector<row_entry>::iterator end() { return m_entries.end(); }
+            typename vector<row_entry>::const_iterator end() const { return m_entries.end(); }
+
             row_entry & add_row_entry(int & pos_idx);
             void del_row_entry(unsigned idx);
             void compress(vector<column> & cols); 
@@ -195,9 +201,13 @@ namespace smt {
             col_entry & operator[](unsigned idx) { return m_entries[idx]; }
             col_entry const & operator[](unsigned idx) const { return m_entries[idx]; }
             typename svector<col_entry>::iterator begin_entries() { return m_entries.begin(); }
-            const typename svector<col_entry>::const_iterator begin_entries() const { return m_entries.begin(); }
+            typename svector<col_entry>::const_iterator begin_entries() const { return m_entries.begin(); }
             typename svector<col_entry>::iterator end_entries() { return m_entries.end(); }
-            const typename svector<col_entry>::const_iterator end_entries() const { return m_entries.end(); }
+            typename svector<col_entry>::const_iterator end_entries() const { return m_entries.end(); }
+            typename svector<col_entry>::iterator begin() { return m_entries.begin(); }
+            typename svector<col_entry>::const_iterator begin() const { return m_entries.begin(); }
+            typename svector<col_entry>::iterator end() { return m_entries.end(); }
+            typename svector<col_entry>::const_iterator end() const { return m_entries.end(); }
             col_entry & add_col_entry(int & pos_idx);
             void del_col_entry(unsigned idx);
         };
@@ -541,9 +551,9 @@ namespace smt {
         bool process_atoms() const;
         unsigned get_num_conflicts() const { return m_num_conflicts; }
         var_kind get_var_kind(theory_var v) const { return m_data[v].kind(); }
-        bool is_base(theory_var v) const { return get_var_kind(v) == BASE; }
-        bool is_quasi_base(theory_var v) const { return get_var_kind(v) == QUASI_BASE; }
-        bool is_non_base(theory_var v) const { return get_var_kind(v) == NON_BASE; }
+        bool is_base(theory_var v) const { return v != null_theory_var && get_var_kind(v) == BASE; }
+        bool is_quasi_base(theory_var v) const { return v != null_theory_var && get_var_kind(v) == QUASI_BASE; }
+        bool is_non_base(theory_var v) const { return v != null_theory_var && get_var_kind(v) == NON_BASE; }
         void set_var_kind(theory_var v, var_kind k) { m_data[v].m_kind = k; }
         unsigned get_var_row(theory_var v) const { SASSERT(!is_non_base(v)); return m_data[v].m_row_id; }
         void set_var_row(theory_var v, unsigned r_id) { m_data[v].m_row_id = r_id; }
@@ -603,6 +613,7 @@ namespace smt {
         theory_var internalize_to_int(app * n);
         void internalize_is_int(app * n);
         theory_var internalize_numeral(app * n);
+        theory_var internalize_numeral(app * n, numeral const& val);
         theory_var internalize_term_core(app * n);
         void mk_axiom(expr * n1, expr * n2, bool simplify_conseq = true);
         void mk_idiv_mod_axioms(expr * dividend, expr * divisor);
@@ -681,8 +692,6 @@ namespace smt {
         void flush_eh() override;
         void reset_eh() override;
         
-        bool validate_eq_in_model(theory_var v1, theory_var v2, bool is_true) const override;
-
         // -----------------------------------
         //
         // bool_var -> atom mapping
