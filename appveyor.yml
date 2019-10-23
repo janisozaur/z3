@@ -1,0 +1,3 @@
+build_script:
+  - cmake . -A Arm64
+  - cmake --build .  --configuration Release
