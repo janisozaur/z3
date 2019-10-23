@@ -57,7 +57,7 @@ Revision History:
 #define _trailing_zeros32(X) _tzcnt_u32(X)
 #endif
 
-#if defined(__LP64__) || defined(_WIN64)
+#if (defined(__LP64__) || defined(_WIN64)) && !defined(_M_ARM) && !defined(_M_ARM64)
  #if defined(__GNUC__)
  #define _trailing_zeros64(X) __builtin_ctzll(X)
  #else
@@ -67,6 +67,11 @@ Revision History:
 inline uint64_t _trailing_zeros64(uint64_t x) {
     uint64_t r = 0;
     for (; 0 == (x & 1) && r < 64; ++r, x >>= 1);
+    return r;
+}
+inline uint32_t _trailing_zeros32(uint32_t x) {
+    uint32_t r = 0;
+    for (; 0 == (x & 1) && r < 32; ++r, x >>= 1);
     return r;
 }
 #endif
