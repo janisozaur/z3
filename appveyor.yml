@@ -1,4 +1,6 @@
 image: Visual Studio 2019
 build_script:
-  - cmake . -A Arm64
+  - mkdir build
+  - cd build
+  - cmake .. -A Arm64
   - cmake --build .  --configuration Release
