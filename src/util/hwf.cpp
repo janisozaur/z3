@@ -276,7 +276,7 @@ void hwf_manager::round_to_integral(mpf_rounding_mode rm, hwf const & x, hwf & o
 
     // According to the Intel Architecture manual, the x87-instruction FRNDINT is the
     // same in 32-bit and 64-bit mode. The _mm_round_* intrinsics are SSE4 extensions.
-#ifdef _WINDOWS
+#ifdef _WINDOWS && !defined(_M_ARM) && !defined(_M_ARM64)
 #if defined( __MINGW32__ ) && ( defined( __GNUG__ ) || defined( __clang__ ) )
     o.value = nearbyint(x.value);
 #else
