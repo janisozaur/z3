@@ -30,7 +30,7 @@ Revision History:
 #include "sat/sat_unit_walk.h"
 #include "sat/sat_ddfw.h"
 #include "sat/sat_prob.h"
-#ifdef _MSC_VER
+#if defined(_MSC_VER) && !defined(_M_ARM) && !defined(_M_ARM64)
 # include <xmmintrin.h>
 #endif
 
