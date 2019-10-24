@@ -175,7 +175,7 @@ foreach (_build_type ${_build_types_as_upper})
       # CFI requires /DYNAMICBASE to be enabled.
       string(APPEND CMAKE_SHARED_LINKER_FLAGS_${_build_type} " /DYNAMICBASE")
     else()
-      string(APPEND CMAKE_SHARED_LINKER_FLAGS_${_build_type} " /DYNAMICBASE:NO")
+
     endif()
 
     # FIXME: This is not necessary. This is MSVC's default.
