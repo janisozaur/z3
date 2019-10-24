@@ -2,5 +2,5 @@ image: Visual Studio 2019
 build_script:
   - mkdir build
   - cd build
-  - cmake .. -A Arm64
+  - cmake .. -A Arm64 -DCMAKE_BUILD_TYPE=RELEASE
   - cmake --build .  --config Release -j 2
